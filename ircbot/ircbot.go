@@ -12,6 +12,51 @@ import (
 
 var crlfStripper = strings.NewReplacer("\r", "", "\n", "")
 
+type Message struct {
+	Username string
+	Channel  string
+	Command  string
+	Text     string
+}
+
+func Parse(line string) (Message, bool) {
+	if strings.HasPrefix(line, "@") {
+		_, rest, ok := strings.Cut(line, " ")
+		if !ok {
+			return Message{}, false
+		}
+		line = rest
+	}
+	if !strings.HasPrefix(line, ":") {
+		return Message{}, false
+	}
+	prefix, rest, ok := strings.Cut(line[1:], " ")
+	if !ok {
+		return Message{}, false
+	}
+	verb, params, ok := strings.Cut(rest, " ")
+	if !ok || verb != "PRIVMSG" {
+		return Message{}, false
+	}
+	target, text, ok := strings.Cut(params, " :")
+	if !ok || !strings.HasPrefix(target, "#") {
+		return Message{}, false
+	}
+
+	user, _, _ := strings.Cut(prefix, "!")
+	msg := Message{
+		Username: user,
+		Channel:  strings.TrimPrefix(target, "#"),
+		Text:     text,
+	}
+	if strings.HasPrefix(text, "!") {
+		cmd, _, _ := strings.Cut(text, " ")
+		msg.Command = cmd
+		msg.Text = strings.TrimPrefix(text, cmd)
+	}
+	return msg, true
+}
+
 type Bot struct {
 	addr    string
 	nick    string

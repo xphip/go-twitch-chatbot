@@ -3,8 +3,6 @@ package main
 import (
 	"fmt"
 	"log"
-	"os"
-	"regexp"
 	"strings"
 	"time"
 
@@ -13,19 +11,15 @@ import (
 
 const server = "irc.chat.twitch.tv:6697"
 
-var msgRegex = regexp.MustCompile(`:([a-z0-9_]*)!([a-z0-9_]*)@([a-z0-9.-]*) ([A-Z]*) #([a-z0-9_]*) :(![a-z0-9_]*)?(.*)`)
-
 func main() {
-	nick := mustEnv("TWITCH_NICK")
-	channel := mustEnv("TWITCH_CHANNEL")
-	token := mustEnv("TWITCH_TOKEN")
+	cfg := loadConfig()
 
-	bot := ircbot.New(server, nick, channel, token)
+	bot := ircbot.New(server, cfg.Nick, cfg.Channel, cfg.Token)
 	if err := bot.Connect(); err != nil {
 		log.Fatal(err)
 	}
 	defer bot.Close()
-	log.Printf("connected to %s as %s on #%s", server, nick, channel)
+	log.Printf("connected to %s as %s on #%s", server, cfg.Nick, cfg.Channel)
 
 	go bot.PingLoop(2 * time.Minute)
 
@@ -42,24 +36,15 @@ func main() {
 			continue
 		}
 
-		m := msgRegex.FindStringSubmatch(line)
-		if m == nil {
+		msg, ok := ircbot.Parse(line)
+		if !ok {
 			fmt.Println(line)
 			continue
 		}
-		username, channel, command, text := m[1], m[5], m[6], m[7]
 
-		if handleCommand(bot, channel, command) {
+		if handleCommand(bot, msg.Channel, msg.Command) {
 			continue
 		}
-		fmt.Printf("[#%s] %s: %s%s\n", channel, username, command, text)
+		fmt.Printf("[#%s] %s: %s%s\n", msg.Channel, msg.Username, msg.Command, msg.Text)
 	}
-}
-
-func mustEnv(key string) string {
-	v := os.Getenv(key)
-	if v == "" {
-		log.Fatalf("environment variable %s is required", key)
-	}
-	return v
 }
