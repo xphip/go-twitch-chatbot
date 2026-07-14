@@ -12,7 +12,11 @@ func TestMsgStripsCRLF(t *testing.T) {
 	defer server.Close()
 
 	b := &Bot{conn: client}
-	go b.Msg("canal", "preço\r\nQUIT :injetado")
+	go func() {
+		if err := b.Msg("canal", "preço\r\nQUIT :injetado"); err != nil {
+			t.Error(err)
+		}
+	}()
 
 	got, err := bufio.NewReader(server).ReadString('\n')
 	if err != nil {

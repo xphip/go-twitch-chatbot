@@ -38,10 +38,12 @@ func (b *Bot) Connect() error {
 	b.conn = conn
 	b.reader = textproto.NewReader(bufio.NewReader(conn))
 
-	b.Send("PASS " + b.pass)
-	b.Send("NICK " + b.nick)
-	b.Join(b.channel)
-	return nil
+	for _, cmd := range []string{"PASS " + b.pass, "NICK " + b.nick} {
+		if err := b.Send(cmd); err != nil {
+			return err
+		}
+	}
+	return b.Join(b.channel)
 }
 
 func (b *Bot) Close() error {
@@ -52,24 +54,27 @@ func (b *Bot) ReadLine() (string, error) {
 	return b.reader.ReadLine()
 }
 
-func (b *Bot) Send(command string) {
-	fmt.Fprintf(b.conn, "%s\r\n", crlfStripper.Replace(command))
+func (b *Bot) Send(command string) error {
+	_, err := fmt.Fprintf(b.conn, "%s\r\n", crlfStripper.Replace(command))
+	return err
 }
 
-func (b *Bot) Msg(channel, msg string) {
-	b.Send(fmt.Sprintf("PRIVMSG #%s :%s", channel, msg))
+func (b *Bot) Msg(channel, msg string) error {
+	return b.Send(fmt.Sprintf("PRIVMSG #%s :%s", channel, msg))
 }
 
-func (b *Bot) Join(channel string) {
-	fmt.Fprintf(b.conn, "JOIN #%s\r\n", channel)
+func (b *Bot) Join(channel string) error {
+	return b.Send("JOIN #" + channel)
 }
 
-func (b *Bot) Leave(channel string) {
-	fmt.Fprintf(b.conn, "PART #%s\r\n", channel)
+func (b *Bot) Leave(channel string) error {
+	return b.Send("PART #" + channel)
 }
 
 func (b *Bot) PingLoop(interval time.Duration) {
 	for range time.Tick(interval) {
-		b.Send("PING :tmi.twitch.tv")
+		if err := b.Send("PING :tmi.twitch.tv"); err != nil {
+			return
+		}
 	}
 }
