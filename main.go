@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -13,7 +14,11 @@ import (
 	"github.com/dpkat/go-twitch-chatbot/ircbot"
 )
 
-const server = "irc.chat.twitch.tv:6697"
+const (
+	server          = "irc.chat.twitch.tv:6697"
+	commandCooldown = 10 * time.Second
+	maxBodySize     = 1 << 20
+)
 
 var (
 	msgRegex   = regexp.MustCompile(`:([a-z0-9_]*)!([a-z0-9_]*)@([a-z0-9.-]*) ([A-Z]*) #([a-z0-9_]*) :(![a-z0-9_]*)?(.*)`)
@@ -34,6 +39,8 @@ func main() {
 
 	go bot.PingLoop(2 * time.Minute)
 
+	var lastDolar time.Time
+
 	for {
 		line, err := bot.ReadLine()
 		if err != nil {
@@ -53,16 +60,11 @@ func main() {
 		username, channel, command, text := m[1], m[5], m[6], m[7]
 
 		switch command {
-		case "!gold":
-			gold, err := fetchGoldPrice()
-			if err != nil {
-				log.Print("!gold: ", err)
+		case "!dolar":
+			if time.Since(lastDolar) < commandCooldown {
 				continue
 			}
-			bot.Msg(channel, "[Bolsa de Azeroth] informa:")
-			time.Sleep(1500 * time.Millisecond)
-			bot.Msg(channel, "[NA] Cotação do OURO: "+gold+"g")
-		case "!dolar":
+			lastDolar = time.Now()
 			dolar, err := fetchDolar()
 			if err != nil {
 				log.Print("!dolar: ", err)
@@ -83,31 +85,6 @@ func mustEnv(key string) string {
 	return v
 }
 
-func fetchGoldPrice() (string, error) {
-	res, err := httpClient.Get("https://wowtoken.info/snapshot.json")
-	if err != nil {
-		return "", err
-	}
-	defer res.Body.Close()
-
-	var snapshot struct {
-		NA struct {
-			Raw struct {
-				Buy json.Number `json:"buy"`
-			} `json:"raw"`
-		} `json:"NA"`
-	}
-	if err := json.NewDecoder(res.Body).Decode(&snapshot); err != nil {
-		return "", err
-	}
-
-	gold := snapshot.NA.Raw.Buy.String()
-	if len(gold) > 3 {
-		gold = gold[:len(gold)-3] + "," + gold[len(gold)-3:]
-	}
-	return gold, nil
-}
-
 func fetchDolar() (string, error) {
 	res, err := httpClient.Get("https://economia.awesomeapi.com.br/json/last/USD-BRL")
 	if err != nil {
@@ -120,7 +97,7 @@ func fetchDolar() (string, error) {
 			Bid string `json:"bid"`
 		} `json:"USDBRL"`
 	}
-	if err := json.NewDecoder(res.Body).Decode(&quote); err != nil {
+	if err := json.NewDecoder(io.LimitReader(res.Body, maxBodySize)).Decode(&quote); err != nil {
 		return "", err
 	}
 	return quote.USDBRL.Bid, nil

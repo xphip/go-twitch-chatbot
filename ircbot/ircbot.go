@@ -6,8 +6,11 @@ import (
 	"fmt"
 	"net"
 	"net/textproto"
+	"strings"
 	"time"
 )
+
+var crlfStripper = strings.NewReplacer("\r", "", "\n", "")
 
 type Bot struct {
 	addr    string
@@ -50,11 +53,11 @@ func (b *Bot) ReadLine() (string, error) {
 }
 
 func (b *Bot) Send(command string) {
-	fmt.Fprintf(b.conn, "%s\r\n", command)
+	fmt.Fprintf(b.conn, "%s\r\n", crlfStripper.Replace(command))
 }
 
 func (b *Bot) Msg(channel, msg string) {
-	fmt.Fprintf(b.conn, "PRIVMSG #%s :%s\r\n", channel, msg)
+	b.Send(fmt.Sprintf("PRIVMSG #%s :%s", channel, msg))
 }
 
 func (b *Bot) Join(channel string) {
